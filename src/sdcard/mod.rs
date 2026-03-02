@@ -33,6 +33,9 @@ pub mod cid;
 pub mod csd;
 pub mod spi;
 
+#[cfg(feature = "async")]
+pub mod async_spi;
+
 // Possible errors the SD card can return
 /// Card indicates last operation was a success
 pub const ERROR_OK: u8 = 0x00;

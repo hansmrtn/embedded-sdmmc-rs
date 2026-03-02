@@ -2,6 +2,10 @@
 //!
 //! Generic code for handling block devices, such as types for identifying
 //! a particular block on a block device by its index.
+//!
+//! When the `async` feature is enabled, this module also provides
+//! [`AsyncBlockDevice`] and [`AsyncBlockCache`] for use with async runtimes
+//! like Embassy.
 
 /// A standard 512 byte block (also known as a sector).
 ///
@@ -305,6 +309,135 @@ impl core::iter::Iterator for BlockIter {
             self.current += BlockCount(1);
             Some(this)
         }
+    }
+}
+
+// ****************************************************************************
+//
+// Async support
+//
+// ****************************************************************************
+
+/// An async block device - a device which can read and write blocks (or
+/// sectors) asynchronously. Only supports devices which are <= 2 TiB in size.
+///
+/// This is the async counterpart to [`BlockDevice`], for use with Embassy or
+/// other async embedded runtimes.
+///
+/// Unlike [`BlockDevice`], this trait requires `&mut self` because async
+/// operations cannot be used with interior mutability patterns like `RefCell`.
+///
+/// We allow `async_fn_in_trait` here because this crate targets `no_std`
+/// single-executor environments (e.g. Embassy on Cortex-M / RISC-V) where
+/// `Send` bounds on futures are not required.
+#[cfg(feature = "async")]
+#[allow(async_fn_in_trait)]
+pub trait AsyncBlockDevice {
+    /// The errors that the `AsyncBlockDevice` can return. Must be debug formattable.
+    type Error: core::error::Error + 'static;
+    /// Read one or more blocks, starting at the given block index.
+    async fn read(
+        &mut self,
+        blocks: &mut [Block],
+        start_block_idx: BlockIdx,
+    ) -> Result<(), Self::Error>;
+    /// Write one or more blocks, starting at the given block index.
+    async fn write(
+        &mut self,
+        blocks: &[Block],
+        start_block_idx: BlockIdx,
+    ) -> Result<(), Self::Error>;
+    /// Determine how many blocks this device can hold.
+    async fn num_blocks(&mut self) -> Result<BlockCount, Self::Error>;
+}
+
+/// A caching layer for async block devices.
+///
+/// Caches a single block. This is the async counterpart to [`BlockCache`].
+#[cfg(feature = "async")]
+#[derive(Debug)]
+pub struct AsyncBlockCache<D> {
+    block_device: D,
+    block: [Block; 1],
+    block_idx: Option<BlockIdx>,
+}
+
+#[cfg(feature = "async")]
+impl<D> AsyncBlockCache<D>
+where
+    D: AsyncBlockDevice,
+{
+    /// Create a new async block cache
+    pub fn new(block_device: D) -> AsyncBlockCache<D> {
+        AsyncBlockCache {
+            block_device,
+            block: [Block::new()],
+            block_idx: None,
+        }
+    }
+
+    /// Read a block, and return a reference to it.
+    pub async fn read(&mut self, block_idx: BlockIdx) -> Result<&Block, D::Error> {
+        if self.block_idx != Some(block_idx) {
+            self.block_idx = None;
+            self.block_device.read(&mut self.block, block_idx).await?;
+            self.block_idx = Some(block_idx);
+        }
+        Ok(&self.block[0])
+    }
+
+    /// Read a block, and return a mutable reference to it.
+    pub async fn read_mut(&mut self, block_idx: BlockIdx) -> Result<&mut Block, D::Error> {
+        if self.block_idx != Some(block_idx) {
+            self.block_idx = None;
+            self.block_device.read(&mut self.block, block_idx).await?;
+            self.block_idx = Some(block_idx);
+        }
+        Ok(&mut self.block[0])
+    }
+
+    /// Write back a block you read with [`Self::read_mut`] and then modified.
+    pub async fn write_back(&mut self) -> Result<(), D::Error> {
+        self.block_device
+            .write(
+                &self.block,
+                self.block_idx.expect("write_back with no read"),
+            )
+            .await
+    }
+
+    /// Write back a block you read with [`Self::read_mut`] and then modified, but to two locations.
+    ///
+    /// This is useful for updating two File Allocation Tables.
+    pub async fn write_back_with_duplicate(&mut self, duplicate: BlockIdx) -> Result<(), D::Error> {
+        self.block_device
+            .write(
+                &self.block,
+                self.block_idx.expect("write_back with no read"),
+            )
+            .await?;
+        self.block_device.write(&self.block, duplicate).await?;
+        Ok(())
+    }
+
+    /// Access a blank sector
+    pub fn blank_mut(&mut self, block_idx: BlockIdx) -> &mut Block {
+        self.block_idx = Some(block_idx);
+        self.block[0].fill(0);
+        &mut self.block[0]
+    }
+
+    /// Access the block device
+    pub fn block_device(&mut self) -> &mut D {
+        // invalidate the cache
+        self.block_idx = None;
+        // give them the block device
+        &mut self.block_device
+    }
+
+    /// Get the block device back
+    pub fn free(self) -> D {
+        self.block_device
     }
 }
 

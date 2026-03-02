@@ -19,6 +19,9 @@ mod info;
 mod ondiskdirentry;
 mod volume;
 
+#[cfg(feature = "async")]
+pub(crate) mod async_volume;
+
 pub use bpb::Bpb;
 pub use info::{Fat16Info, Fat32Info, FatSpecificInfo, InfoSector};
 pub use ondiskdirentry::OnDiskDirEntry;

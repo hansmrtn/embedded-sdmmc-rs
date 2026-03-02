@@ -99,6 +99,10 @@ use filesystem::Handle;
 #[doc(inline)]
 pub use crate::blockdevice::{Block, BlockCache, BlockCount, BlockDevice, BlockIdx};
 
+#[cfg(feature = "async")]
+#[doc(inline)]
+pub use crate::blockdevice::{AsyncBlockCache, AsyncBlockDevice};
+
 #[doc(inline)]
 pub use crate::fat::{FatVolume, VolumeName};
 
@@ -116,9 +120,19 @@ pub use crate::sdcard::spi::Error as SdCardError;
 #[doc(inline)]
 pub use crate::sdcard::spi::SdCard;
 
+#[cfg(feature = "async")]
+#[doc(inline)]
+pub use crate::sdcard::async_spi::AsyncSdCard;
+
 mod volume_mgr;
 #[doc(inline)]
 pub use volume_mgr::VolumeManager;
+
+#[cfg(feature = "async")]
+mod async_volume_mgr;
+#[cfg(feature = "async")]
+#[doc(inline)]
+pub use async_volume_mgr::AsyncVolumeManager;
 
 #[cfg(all(feature = "defmt-log", feature = "log"))]
 compile_error!("Cannot enable both log and defmt-log");

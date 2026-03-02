@@ -4,6 +4,9 @@ use std::io::prelude::*;
 
 use embedded_sdmmc::{Block, BlockCount, BlockDevice, BlockIdx};
 
+#[cfg(feature = "async")]
+use embedded_sdmmc::AsyncBlockDevice;
+
 /// This file contains:
 ///
 /// ```console
@@ -172,6 +175,92 @@ pub fn make_time_source() -> TestTimeSource {
 #[allow(unused)]
 pub fn get_time_source_string() -> &'static str {
     "2003-04-04 13:30:04"
+}
+
+// ****************************************************************************
+//
+// Async support
+//
+// ****************************************************************************
+
+/// Implements the async block device traits for a chunk of bytes in RAM.
+///
+/// Unlike the sync [`RamDisk`], this uses direct `&mut self` access rather
+/// than `RefCell`, matching the async API's requirements.
+#[cfg(feature = "async")]
+pub struct AsyncRamDisk<T> {
+    contents: T,
+}
+
+#[cfg(feature = "async")]
+impl<T> AsyncRamDisk<T> {
+    fn new(contents: T) -> AsyncRamDisk<T> {
+        AsyncRamDisk { contents }
+    }
+}
+
+#[cfg(feature = "async")]
+impl<T> AsyncBlockDevice for AsyncRamDisk<T>
+where
+    T: AsMut<[u8]> + AsRef<[u8]>,
+{
+    type Error = Error;
+
+    async fn read(
+        &mut self,
+        blocks: &mut [Block],
+        start_block_idx: BlockIdx,
+    ) -> Result<(), Self::Error> {
+        let contents: &[u8] = self.contents.as_ref();
+        let mut block_idx = start_block_idx;
+        for block in blocks.iter_mut() {
+            let start_offset = block_idx.0 as usize * Block::LEN;
+            let end_offset = start_offset + Block::LEN;
+            if end_offset > contents.len() {
+                return Err(Error::OutOfBounds(block_idx));
+            }
+            block
+                .as_mut_slice()
+                .copy_from_slice(&contents[start_offset..end_offset]);
+            block_idx.0 += 1;
+        }
+        Ok(())
+    }
+
+    async fn write(
+        &mut self,
+        blocks: &[Block],
+        start_block_idx: BlockIdx,
+    ) -> Result<(), Self::Error> {
+        let contents: &mut [u8] = self.contents.as_mut();
+        let mut block_idx = start_block_idx;
+        for block in blocks.iter() {
+            let start_offset = block_idx.0 as usize * Block::LEN;
+            let end_offset = start_offset + Block::LEN;
+            if end_offset > contents.len() {
+                return Err(Error::OutOfBounds(block_idx));
+            }
+            contents[start_offset..end_offset].copy_from_slice(block.as_slice());
+            block_idx.0 += 1;
+        }
+        Ok(())
+    }
+
+    async fn num_blocks(&mut self) -> Result<BlockCount, Self::Error> {
+        let contents: &[u8] = self.contents.as_ref();
+        let len_blocks = contents.len() / Block::LEN;
+        if len_blocks > u32::MAX as usize {
+            panic!("Test disk too large! Only 2**32 blocks allowed");
+        }
+        Ok(BlockCount(len_blocks as u32))
+    }
+}
+
+/// Turn some gzipped bytes into an async block device.
+#[cfg(feature = "async")]
+pub fn make_async_block_device(gzip_bytes: &[u8]) -> Result<AsyncRamDisk<Vec<u8>>, Error> {
+    let data = unpack_disk(gzip_bytes)?;
+    Ok(AsyncRamDisk::new(data))
 }
 
 // ****************************************************************************
