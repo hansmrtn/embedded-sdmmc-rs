@@ -325,7 +325,7 @@ impl CsdV1 {
     pub fn verify_crc7(&self) -> bool {
         let raw_bytes = self.raw_value().to_be_bytes();
         let calculated = super::crc7(&raw_bytes[0..15]);
-        self.crc().value() == calculated
+        ((self.crc().value() << 1) | 1) == calculated
     }
 }
 
@@ -429,7 +429,7 @@ impl CsdV2 {
     pub fn verify_crc7(&self) -> bool {
         let raw_bytes = self.raw_value().to_be_bytes();
         let calculated = super::crc7(&raw_bytes[0..15]);
-        self.crc().value() == calculated
+        ((self.crc().value() << 1) | 1) == calculated
     }
 }
 
@@ -533,6 +533,6 @@ impl CsdV3 {
     pub fn verify_crc7(&self) -> bool {
         let raw_bytes = self.raw_value().to_be_bytes();
         let calculated = super::crc7(&raw_bytes[0..15]);
-        self.crc().value() == calculated
+        ((self.crc().value() << 1) | 1) == calculated
     }
 }

@@ -116,7 +116,7 @@ pub fn crc7(data: &[u8]) -> u8 {
             d <<= 1;
         }
     }
-    crc & 0x7F
+    (crc << 1) | 1
 }
 
 /// Perform the X25 CRC calculation, as used for data blocks.
@@ -146,28 +146,28 @@ mod test {
     #[test]
     fn test_crc7_0() {
         const DATA: [u8; 15] = hex!("00 26 00 32 5F 59 83 C8 AD DB CF FF D2 40 40");
-        assert_eq!(crc7(&DATA), 0x52);
+        assert_eq!(crc7(&DATA), 0xA5);
     }
 
     #[test]
     fn test_crc7_1() {
         // Taken from page 119 of the SD card spec.
         let cmd0_arg0: [u8; 5] = [0b01000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000];
-        assert_eq!(crc7(&cmd0_arg0), 0b1001010);
+        assert_eq!(crc7(&cmd0_arg0), 0b10010101);
     }
 
     #[test]
     fn test_crc7_2() {
         // Taken from page 119 of the SD card spec.
         let cmd17_arg0: [u8; 5] = [0b01010001, 0b00000000, 0b00000000, 0b00000000, 0b00000000];
-        assert_eq!(crc7(&cmd17_arg0), 0b0101010);
+        assert_eq!(crc7(&cmd17_arg0), 0b01010101);
     }
 
     #[test]
     fn test_crc7_3() {
         // Taken from page 119 of the SD card spec.
         let cmd17_response: [u8; 5] = [0b00010001, 0b00000000, 0b00000000, 0b00001001, 0b00000000];
-        assert_eq!(crc7(&cmd17_response), 0b0110011);
+        assert_eq!(crc7(&cmd17_response), 0b01100111);
     }
 
     #[test]

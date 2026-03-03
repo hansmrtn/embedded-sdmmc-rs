@@ -53,7 +53,7 @@ impl Cid {
     pub fn verify_crc7(&self) -> bool {
         let raw_bytes = self.raw_value().to_be_bytes();
         let calculated = crc7(&raw_bytes[0..15]);
-        self.crc7().value() == calculated
+        ((self.crc7().value() << 1) | 1) == calculated
     }
 
     /// Product name as a byte array.
